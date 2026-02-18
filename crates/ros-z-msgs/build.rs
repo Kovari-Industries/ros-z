@@ -163,16 +163,11 @@ fn discover_ros_packages(is_humble: bool) -> Result<Vec<PathBuf>> {
             "cargo:info=Found {} packages from local bundled assets",
             local_count
         );
-
-        // Emit cfg flags for each found package
-        for package_name in package_map.keys() {
-            println!("cargo:rustc-cfg=has_{}", package_name);
-        }
-
-        return Ok(package_map.into_values().collect());
     }
 
-    // Priority 2: System ROS installation (fallback for packages not bundled locally)
+    // Priority 2: System ROS installation (fallback for packages not bundled locally).
+    // Keep local assets for stability, but backfill missing packages (e.g. tf2_msgs)
+    // from the sourced ROS installation.
     let system_packages = discover_system_packages(&all_packages)?;
     let mut system_added = 0;
     for pkg_path in system_packages {
@@ -207,6 +202,11 @@ fn discover_ros_packages(is_humble: bool) -> Result<Vec<PathBuf>> {
     if !still_missing.is_empty() {
         println!("cargo:warning=Missing packages: {:?}", still_missing);
         println!("cargo:warning=Consider installing ROS 2 or checking ros-z-codegen/assets/jazzy");
+    }
+
+    // Emit cfg flags for each found package
+    for package_name in package_map.keys() {
+        println!("cargo:rustc-cfg=has_{}", package_name);
     }
 
     Ok(package_map.into_values().collect())
