@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         let package_refs: Vec<&std::path::Path> =
             ros_packages.iter().map(|p| p.as_path()).collect();
         generator.generate_from_msg_files(&package_refs)?;
+        patch_generated_output(&out_dir)?;
         println!("cargo:warning=generated messages");
 
         println!(
@@ -130,6 +131,31 @@ fn main() -> Result<()> {
     let proto_file = out_dir.join("generated_proto.rs");
     if !proto_file.exists() {
         std::fs::write(&proto_file, "// Empty protobuf generated file\n").unwrap();
+    }
+
+    Ok(())
+}
+
+fn patch_generated_output(out_dir: &std::path::Path) -> Result<()> {
+    let generated_rs = out_dir.join("generated.rs");
+    if !generated_rs.exists() {
+        return Ok(());
+    }
+
+    let content = std::fs::read_to_string(&generated_rs)?;
+    let patched = content
+        .replace(
+            "type Feedback = super::LookupTransformFeedback;",
+            "type Feedback = super::LookupTransformResult;",
+        )
+        .replace(
+            "type Feedback = super::LookupTransform_Feedback_Message;",
+            "type Feedback = super::LookupTransformResult;",
+        );
+
+    if patched != content {
+        std::fs::write(&generated_rs, patched)?;
+        println!("cargo:warning=patched tf2_msgs LookupTransform feedback symbol");
     }
 
     Ok(())
@@ -223,6 +249,7 @@ fn get_all_packages(is_humble: bool) -> Vec<&'static str> {
         "builtin_interfaces",     // Always required
         "action_msgs",            // Required for ROS 2 actions
         "unique_identifier_msgs", // Required by action_msgs
+        "tf2_msgs",               // Needed for TFMessage (/tf, /tf_static)
     ];
 
     // service_msgs was introduced in ROS 2 Iron (May 2023) as part of the service
