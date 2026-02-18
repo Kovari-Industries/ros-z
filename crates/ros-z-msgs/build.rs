@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         let package_refs: Vec<&std::path::Path> =
             ros_packages.iter().map(|p| p.as_path()).collect();
         generator.generate_from_msg_files(&package_refs)?;
+        patch_generated_output(&out_dir)?;
         println!("cargo:warning=generated messages");
 
         println!(
@@ -223,6 +224,7 @@ fn get_all_packages(is_humble: bool) -> Vec<&'static str> {
         "builtin_interfaces",     // Always required
         "action_msgs",            // Required for ROS 2 actions
         "unique_identifier_msgs", // Required by action_msgs
+        "tf2_msgs",               // Required for /tf and /tf_static subscriptions
     ];
 
     // service_msgs was introduced in ROS 2 Iron (May 2023) as part of the service
@@ -415,4 +417,23 @@ fn detect_ros_version() -> bool {
     // Default to Jazzy (modern)
     println!("cargo:warning=ROS Jazzy+ detected - using modern codegen");
     false
+}
+
+fn patch_generated_output(out_dir: &std::path::Path) -> Result<()> {
+    let generated_rs = out_dir.join("generated.rs");
+    if !generated_rs.exists() {
+        return Ok(());
+    }
+
+    let mut content = std::fs::read_to_string(&generated_rs)?;
+    let broken_a = "type Feedback = super::LookupTransform_Feedback_Message;";
+    let broken_b = "type Feedback = super::LookupTransformFeedback;";
+    let fixed = "type Feedback = super::LookupTransformResult;";
+    if content.contains(broken_a) || content.contains(broken_b) {
+        content = content.replace(broken_a, fixed);
+        content = content.replace(broken_b, fixed);
+        std::fs::write(&generated_rs, &content)?;
+        println!("cargo:warning=patched tf2_msgs LookupTransform feedback type");
+    }
+    Ok(())
 }
