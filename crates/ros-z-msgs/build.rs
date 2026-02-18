@@ -223,6 +223,7 @@ fn get_all_packages(is_humble: bool) -> Vec<&'static str> {
         "builtin_interfaces",     // Always required
         "action_msgs",            // Required for ROS 2 actions
         "unique_identifier_msgs", // Required by action_msgs
+        "tf2_msgs",               // Needed for TFMessage (/tf, /tf_static)
     ];
 
     // service_msgs was introduced in ROS 2 Iron (May 2023) as part of the service
