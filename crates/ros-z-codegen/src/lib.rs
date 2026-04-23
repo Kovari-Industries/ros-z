@@ -104,8 +104,25 @@ impl MessageGenerator {
             std::collections::HashSet::new()
         };
 
-        let mut resolver =
-            resolver::Resolver::with_external_packages(self.config.is_humble, external_packages);
+        let mut resolver = resolver::Resolver::with_external_packages(
+            self.config.is_humble,
+            external_packages.clone(),
+        );
+
+        // External packages contribute type descriptions to the RIHS01 hash of
+        // any local message that references them (e.g. a custom message with
+        // a std_msgs/Header field), so we load their bundled .msg definitions
+        // and seed the resolver. Without this step the resolver treats
+        // external types as "already resolved" but never populates their type
+        // descriptions, producing a hash that omits the external type's fields
+        // and doesn't match real ROS 2 publishers
+        let seeded = Self::load_external_type_descriptions(
+            &external_packages,
+            self.config.is_humble,
+        )
+        .context("Failed to load external package type descriptions")?;
+        resolver.seed_type_descriptions(seeded);
+
         let resolved_messages = resolver
             .resolve_messages(messages)
             .context("Failed to resolve message dependencies")?;
@@ -146,6 +163,70 @@ impl MessageGenerator {
         }
 
         Ok(())
+    }
+
+    /// Load type descriptions for external packages from ros-z-codegen's
+    /// bundled assets, so the hasher can compute a complete RIHS01 hash for
+    /// any local message that references an external type
+    ///
+    /// The assets path is baked in via `CARGO_MANIFEST_DIR` at ros-z-codegen's
+    /// compile time so consumers don't have to locate the crate source at
+    /// build time
+    fn load_external_type_descriptions(
+        external_packages: &std::collections::HashSet<String>,
+        is_humble: bool,
+    ) -> Result<std::collections::BTreeMap<String, crate::hashing::TypeDescription>> {
+        use std::collections::BTreeMap;
+
+        if external_packages.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/jazzy");
+        if !assets_dir.exists() {
+            println!(
+                "cargo:warning=ros-z-codegen bundled assets dir not found at {:?}; \
+                 hashes for messages referencing external types will be incorrect",
+                assets_dir
+            );
+            return Ok(BTreeMap::new());
+        }
+
+        let mut pkg_paths = Vec::new();
+        for pkg_name in external_packages {
+            let pkg_path = assets_dir.join(pkg_name);
+            let has_defs = pkg_path.join("msg").exists()
+                || pkg_path.join("srv").exists()
+                || pkg_path.join("action").exists();
+            if has_defs {
+                pkg_paths.push(pkg_path);
+            } else {
+                println!(
+                    "cargo:warning=No bundled assets for external package '{}' at {:?}; \
+                     RIHS01 hashes for messages referencing its types will be incorrect",
+                    pkg_name, pkg_path
+                );
+            }
+        }
+
+        if pkg_paths.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+
+        let pkg_path_refs: Vec<&Path> = pkg_paths.iter().map(|p| p.as_path()).collect();
+        let (messages, _services, _actions) = discovery::discover_all(&pkg_path_refs)
+            .context("Failed to discover bundled external package messages")?;
+        let messages = Self::filter_messages(messages);
+
+        // Resolve with an empty external-packages set so descriptions populate
+        // fully, this is a throwaway resolver and only its type_descriptions
+        // map is used to seed the main resolver
+        let mut aux_resolver = resolver::Resolver::new(is_humble);
+        aux_resolver
+            .resolve_messages(messages)
+            .context("Failed to resolve bundled external package messages")?;
+
+        Ok(aux_resolver.into_type_descriptions())
     }
 
     /// Filter out problematic messages (actionlib, wstring, etc.)

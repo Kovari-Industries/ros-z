@@ -41,6 +41,25 @@ impl Resolver {
         }
     }
 
+    /// Pre-populate the resolver with type descriptions for types whose
+    /// packages are marked external, so the hasher can compute a complete
+    /// RIHS01 hash for any message that references them. Without this the
+    /// hash silently omits the external type's fields and diverges from what
+    /// real ROS 2 publishers compute
+    pub fn seed_type_descriptions(
+        &mut self,
+        seeded: impl IntoIterator<Item = (String, TypeDescription)>,
+    ) {
+        self.type_descriptions.extend(seeded);
+    }
+
+    /// Consume the resolver and return its accumulated type descriptions,
+    /// handy for resolving external packages with a throwaway resolver and
+    /// then seeding the main one
+    pub fn into_type_descriptions(self) -> BTreeMap<String, TypeDescription> {
+        self.type_descriptions
+    }
+
     /// Check if a package is external (types come from another crate)
     fn is_external_package(&self, package: &str) -> bool {
         self.external_packages.contains(package)

@@ -11,12 +11,17 @@
 //! The interop tests in `ros-z-tests` provide end-to-end correctness validation;
 //! these tests guard against regressions in future refactors.
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use ros_z_codegen::{
     discovery::{discover_messages, discover_services},
     resolver::Resolver,
-    types::{ResolvedMessage, ResolvedService},
+    types::{
+        ArrayType, Field, FieldType, ParsedMessage, ResolvedMessage, ResolvedService,
+    },
 };
 
 /// Path to the bundled Jazzy message assets.
@@ -363,4 +368,119 @@ fn print_service_hashes() {
         }
     }
     println!();
+}
+
+// External-package seeding regression
+//
+// When a consumer crate (e.g. evo_interfaces_rs) uses `external_crate` to
+// point at ros_z_msgs for standard types, the resolver used to treat
+// std_msgs / builtin_interfaces as "resolved" without populating their type
+// descriptions, so RIHS hashes for local messages that referenced
+// std_msgs/Header silently omitted Header's fields and diverged from real
+// ROS 2 publishers
+//
+// This test pins the contract: a local message whose only field is a
+// std_msgs/Header must produce the same hash whether std_msgs and
+// builtin_interfaces are resolved inline (as local packages) or their type
+// descriptions are pre-seeded into a resolver that marks them external. A
+// divergence here means the external-package path is dropping dependency
+// information again
+
+fn parsed_header_wrapper() -> ParsedMessage {
+    ParsedMessage {
+        name: "HeaderWrapper".to_string(),
+        package: "regression_pkg".to_string(),
+        fields: vec![Field {
+            name: "header".to_string(),
+            field_type: FieldType {
+                base_type: "Header".to_string(),
+                package: Some("std_msgs".to_string()),
+                array: ArrayType::Single,
+                string_bound: None,
+            },
+            default: None,
+        }],
+        constants: vec![],
+        source: "std_msgs/Header header\n".to_string(),
+        path: PathBuf::from("HeaderWrapper.msg"),
+    }
+}
+
+fn discover_all_in(pkg: &str) -> Vec<ParsedMessage> {
+    let pkg_path = assets_dir().join(pkg);
+    discover_messages(&pkg_path, pkg)
+        .unwrap_or_else(|e| panic!("Failed to discover messages in {pkg}: {e}"))
+}
+
+#[test]
+fn test_external_package_hash_matches_local_hash() {
+    // Baseline: resolve HeaderWrapper alongside std_msgs + builtin_interfaces
+    // as ordinary local packages, so full type descriptions are available and
+    // the hasher includes Header's fields
+    let mut local_input = discover_all_in("builtin_interfaces");
+    local_input.extend(discover_all_in("std_msgs"));
+    local_input.push(parsed_header_wrapper());
+
+    let mut local_resolver = Resolver::new(false);
+    let local_resolved = local_resolver
+        .resolve_messages(local_input)
+        .expect("local resolution failed");
+    let local_hash = local_resolved
+        .iter()
+        .find(|m| m.parsed.name == "HeaderWrapper")
+        .expect("HeaderWrapper missing from local resolution")
+        .type_hash
+        .to_rihs_string();
+
+    // Experiment: resolve std_msgs + builtin_interfaces in a throwaway
+    // resolver, hand the type descriptions to a main resolver that marks
+    // those packages external, then resolve HeaderWrapper through it. This
+    // mirrors what `MessageGenerator::load_external_type_descriptions` does
+    // for consumers that use `external_crate`
+    let mut seed_input = discover_all_in("builtin_interfaces");
+    seed_input.extend(discover_all_in("std_msgs"));
+    let mut seed_resolver = Resolver::new(false);
+    seed_resolver
+        .resolve_messages(seed_input)
+        .expect("seed resolution failed");
+    let seeded = seed_resolver.into_type_descriptions();
+
+    let external_packages: HashSet<String> =
+        ["std_msgs", "builtin_interfaces"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    let mut external_resolver = Resolver::with_external_packages(false, external_packages);
+    external_resolver.seed_type_descriptions(seeded);
+    let external_resolved = external_resolver
+        .resolve_messages(vec![parsed_header_wrapper()])
+        .expect("external resolution failed");
+    let external_hash = external_resolved[0].type_hash.to_rihs_string();
+
+    assert_eq!(
+        local_hash, external_hash,
+        "RIHS hash for a message referencing std_msgs/Header must not depend on \
+         whether std_msgs is local or external-with-seeded-descriptions"
+    );
+}
+
+#[test]
+fn test_missing_external_type_description_is_hard_error() {
+    // Without seeding, marking std_msgs + builtin_interfaces external means
+    // the resolver thinks the types are resolved but has no type descriptions
+    // for them. Hashing HeaderWrapper must fail loudly, the old behavior was
+    // a silent skip that produced a subtly wrong hash
+    let external_packages: HashSet<String> =
+        ["std_msgs", "builtin_interfaces"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    let mut resolver = Resolver::with_external_packages(false, external_packages);
+    let result = resolver.resolve_messages(vec![parsed_header_wrapper()]);
+    let err = result.expect_err("resolution should fail when external type descriptions are missing");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("std_msgs/Header"),
+        "error should name the missing type, got: {msg}"
+    );
 }

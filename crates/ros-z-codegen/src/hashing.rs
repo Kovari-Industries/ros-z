@@ -212,10 +212,19 @@ pub fn build_type_description_msg(
 
                 let dep_key = format!("{}/{}", pkg, field.field_type.base_type);
 
-                if let Some(dep_desc) = resolved_deps.get(&dep_key) {
-                    collect_referenced_types(dep_desc, resolved_deps, &mut referenced_types);
-                    referenced_types.insert(dep_desc.type_name.clone(), dep_desc.clone());
-                }
+                let Some(dep_desc) = resolved_deps.get(&dep_key) else {
+                    bail!(
+                        "Missing type description for `{}` while hashing `{}/{}`. \
+                         If `{}` lives in a package provided by an external crate \
+                         (e.g. ros_z_msgs), its bundled .msg definitions must be \
+                         loaded into the resolver before hashing, otherwise the \
+                         RIHS01 hash omits the referenced type's fields and won't \
+                         match real ROS 2 publishers",
+                        dep_key, msg.package, msg.name, pkg
+                    );
+                };
+                collect_referenced_types(dep_desc, resolved_deps, &mut referenced_types);
+                referenced_types.insert(dep_desc.type_name.clone(), dep_desc.clone());
             }
         }
     }
