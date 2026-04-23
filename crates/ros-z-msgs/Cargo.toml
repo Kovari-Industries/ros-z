@@ -54,6 +54,7 @@ nav_msgs = ["std_msgs", "geometry_msgs"]
 example_interfaces = []
 action_tutorials_interfaces = []
 test_msgs = []
+tf2_msgs = ["geometry_msgs"]
 
 # Convenience aliases
 common_interfaces = ["std_msgs", "geometry_msgs", "sensor_msgs"]
@@ -67,6 +68,7 @@ all_msgs = [
   "action_tutorials_interfaces",
   "rcl_interfaces",
   "test_msgs",
+  "tf2_msgs",
 ]
 
 bundled_msgs = ["std_msgs", "geometry_msgs", "sensor_msgs", "nav_msgs"]

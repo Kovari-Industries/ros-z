@@ -89,6 +89,7 @@ impl MessageGenerator {
                 "example_interfaces",
                 "action_tutorials_interfaces",
                 "test_msgs",
+                "tf2_msgs",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -261,22 +262,12 @@ impl MessageGenerator {
 
         // Add action goal/result/feedback messages and track actions
         for action in actions {
-            packages
+            let entry = packages
                 .entry(action.parsed.package.clone())
-                .or_default()
-                .push(&action.goal);
-            if let Some(ref result) = action.result {
-                packages
-                    .entry(action.parsed.package.clone())
-                    .or_default()
-                    .push(result);
-            }
-            if let Some(ref feedback) = action.feedback {
-                packages
-                    .entry(action.parsed.package.clone())
-                    .or_default()
-                    .push(feedback);
-            }
+                .or_default();
+            entry.push(&action.goal);
+            entry.push(&action.result);
+            entry.push(&action.feedback);
 
             package_actions
                 .entry(action.parsed.package.clone())

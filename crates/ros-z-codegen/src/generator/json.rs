@@ -227,8 +227,8 @@ fn convert_action(action: &ResolvedAction) -> ActionDefinition {
         feedback_message_hash: action.feedback_message_hash.to_rihs_string(),
         status_hash: action.status_hash.to_rihs_string(),
         goal: convert_message(&action.goal),
-        result: action.result.as_ref().map(convert_message),
-        feedback: action.feedback.as_ref().map(convert_message),
+        result: Some(convert_message(&action.result)),
+        feedback: Some(convert_message(&action.feedback)),
     }
 }
 

@@ -220,32 +220,20 @@ impl Resolver {
 
         // Resolve goal, result, and feedback as standalone messages
         let goal = self.resolve_message(action.goal.clone())?;
-        let result = action
-            .result
-            .as_ref()
-            .map(|r| self.resolve_message(r.clone()))
-            .transpose()?;
-        let feedback = action
-            .feedback
-            .as_ref()
-            .map(|f| self.resolve_message(f.clone()))
-            .transpose()?;
+        let result = self.resolve_message(action.result.clone())?;
+        let feedback = self.resolve_message(action.feedback.clone())?;
 
         // Store their type descriptions
         let goal_key = self.message_key(&action.goal);
-        let result_key = action.result.as_ref().map(|r| self.message_key(r));
-        let feedback_key = action.feedback.as_ref().map(|f| self.message_key(f));
+        let result_key = self.message_key(&action.result);
+        let feedback_key = self.message_key(&action.feedback);
 
         self.type_descriptions
             .insert(goal_key.clone(), goal.type_description().clone());
-        if let (Some(result), Some(result_key)) = (&result, &result_key) {
-            self.type_descriptions
-                .insert(result_key.clone(), result.type_description().clone());
-        }
-        if let (Some(feedback), Some(feedback_key)) = (&feedback, &feedback_key) {
-            self.type_descriptions
-                .insert(feedback_key.clone(), feedback.type_description().clone());
-        }
+        self.type_descriptions
+            .insert(result_key.clone(), result.type_description().clone());
+        self.type_descriptions
+            .insert(feedback_key.clone(), feedback.type_description().clone());
 
         // Calculate action type hash (use goal hash for now)
         // TODO: Implement proper action hash calculation
@@ -254,16 +242,8 @@ impl Resolver {
         // Calculate type hashes for action protocol services/messages
         // These follow ROS2 action protocol structure
         let send_goal_hash = self.calculate_send_goal_hash(&action, &goal)?;
-        let get_result_hash = if let Some(ref result) = result {
-            self.calculate_get_result_hash(&action, result)?
-        } else {
-            TypeHash([0u8; 32]) // Default for actions without result
-        };
-        let feedback_message_hash = if let Some(ref feedback) = feedback {
-            self.calculate_feedback_message_hash(&action, feedback)?
-        } else {
-            TypeHash([0u8; 32]) // Default for actions without feedback
-        };
+        let get_result_hash = self.calculate_get_result_hash(&action, &result)?;
+        let feedback_message_hash = self.calculate_feedback_message_hash(&action, &feedback)?;
 
         // Calculate standard ROS2 action protocol type hashes
         // These are shared by all actions (action_msgs package)

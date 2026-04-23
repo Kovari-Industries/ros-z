@@ -65,6 +65,12 @@
       "dependencies": [
         "builtin_interfaces"
       ]
+    },
+    "tf2_msgs": {
+      "dependencies": [
+        "builtin_interfaces",
+        "geometry_msgs"
+      ]
     }
   }
 }

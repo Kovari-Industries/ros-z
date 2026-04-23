@@ -334,21 +334,16 @@ fn test_parse_fibonacci_action() {
     assert_eq!(action.goal.fields[0].field_type.base_type, "int32");
 
     // Result: int32[] sequence
-    let result = action
-        .result
-        .as_ref()
-        .expect("Fibonacci action should have result");
-    assert_eq!(result.fields.len(), 1);
-    assert_eq!(result.fields[0].name, "sequence");
-    assert_eq!(result.fields[0].field_type.array, ArrayType::Unbounded);
+    assert_eq!(action.result.fields.len(), 1);
+    assert_eq!(action.result.fields[0].name, "sequence");
+    assert_eq!(
+        action.result.fields[0].field_type.array,
+        ArrayType::Unbounded
+    );
 
     // Feedback: int32[] sequence
-    let feedback = action
-        .feedback
-        .as_ref()
-        .expect("Fibonacci action should have feedback");
-    assert_eq!(feedback.fields.len(), 1);
-    assert_eq!(feedback.fields[0].name, "sequence");
+    assert_eq!(action.feedback.fields.len(), 1);
+    assert_eq!(action.feedback.fields[0].name, "sequence");
 }
 
 #[test]
@@ -645,10 +640,8 @@ fn test_action_goal_result_feedback_hashes_differ() {
         .unwrap();
 
     let goal_hash = fib.goal.type_hash.to_rihs_string();
-    let result = fib.result.as_ref().unwrap();
-    let feedback = fib.feedback.as_ref().unwrap();
-    let result_hash = result.type_hash.to_rihs_string();
-    let feedback_hash = feedback.type_hash.to_rihs_string();
+    let result_hash = fib.result.type_hash.to_rihs_string();
+    let feedback_hash = fib.feedback.type_hash.to_rihs_string();
 
     assert_ne!(
         goal_hash, result_hash,
@@ -684,20 +677,16 @@ fn print_golden_hashes() {
             action.parsed.name,
             action.goal.type_hash.to_rihs_string()
         );
-        if let Some(ref r) = action.result {
-            println!(
-                "{}(result): {}",
-                action.parsed.name,
-                r.type_hash.to_rihs_string()
-            );
-        }
-        if let Some(ref f) = action.feedback {
-            println!(
-                "{}(feedback): {}",
-                action.parsed.name,
-                f.type_hash.to_rihs_string()
-            );
-        }
+        println!(
+            "{}(result): {}",
+            action.parsed.name,
+            action.result.type_hash.to_rihs_string()
+        );
+        println!(
+            "{}(feedback): {}",
+            action.parsed.name,
+            action.feedback.type_hash.to_rihs_string()
+        );
     }
 }
 

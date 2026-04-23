@@ -31,8 +31,8 @@ pub struct ParsedAction {
     pub name: String,
     pub package: String,
     pub goal: ParsedMessage,
-    pub result: Option<ParsedMessage>,
-    pub feedback: Option<ParsedMessage>,
+    pub result: ParsedMessage,
+    pub feedback: ParsedMessage,
     pub source: String,
     pub path: PathBuf,
 }
@@ -107,8 +107,8 @@ pub struct ResolvedService {
 pub struct ResolvedAction {
     pub parsed: ParsedAction,
     pub goal: ResolvedMessage,
-    pub result: Option<ResolvedMessage>,
-    pub feedback: Option<ResolvedMessage>,
+    pub result: ResolvedMessage,
+    pub feedback: ResolvedMessage,
     pub type_hash: TypeHash,
     // Type hashes for action protocol services/messages
     pub send_goal_hash: TypeHash,

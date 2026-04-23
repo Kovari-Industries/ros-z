@@ -72,27 +72,23 @@ pub fn parse_action(
         path,
     )?;
 
-    let result = if result_content.trim().is_empty() {
-        None
-    } else {
-        Some(parse_action_section(
-            &result_content,
-            &format!("{}Result", action_name),
-            package,
-            path,
-        )?)
-    };
+    // ROS 2 actions always expose Goal/Result/Feedback types even when the
+    // .action file leaves a section empty (real rosidl emits an empty struct
+    // with a real type hash). Always parse through — an empty section yields
+    // a ParsedMessage with zero fields.
+    let result = parse_action_section(
+        &result_content,
+        &format!("{}Result", action_name),
+        package,
+        path,
+    )?;
 
-    let feedback = if feedback_content.trim().is_empty() {
-        None
-    } else {
-        Some(parse_action_section(
-            &feedback_content,
-            &format!("{}Feedback", action_name),
-            package,
-            path,
-        )?)
-    };
+    let feedback = parse_action_section(
+        &feedback_content,
+        &format!("{}Feedback", action_name),
+        package,
+        path,
+    )?;
 
     Ok(ParsedAction {
         name: action_name.to_string(),
@@ -178,18 +174,16 @@ int32[] partial_sequence
         assert_eq!(action.goal.fields[0].field_type.base_type, "int32");
 
         // Check result
-        let result = action.result.as_ref().unwrap();
-        assert_eq!(result.name, "FibonacciResult");
-        assert_eq!(result.fields.len(), 1);
-        assert_eq!(result.fields[0].name, "sequence");
-        assert_eq!(result.fields[0].field_type.base_type, "int32");
+        assert_eq!(action.result.name, "FibonacciResult");
+        assert_eq!(action.result.fields.len(), 1);
+        assert_eq!(action.result.fields[0].name, "sequence");
+        assert_eq!(action.result.fields[0].field_type.base_type, "int32");
 
         // Check feedback
-        let feedback = action.feedback.as_ref().unwrap();
-        assert_eq!(feedback.name, "FibonacciFeedback");
-        assert_eq!(feedback.fields.len(), 1);
-        assert_eq!(feedback.fields[0].name, "partial_sequence");
-        assert_eq!(feedback.fields[0].field_type.base_type, "int32");
+        assert_eq!(action.feedback.name, "FibonacciFeedback");
+        assert_eq!(action.feedback.fields.len(), 1);
+        assert_eq!(action.feedback.fields[0].name, "partial_sequence");
+        assert_eq!(action.feedback.fields[0].field_type.base_type, "int32");
     }
 
     #[test]
@@ -214,10 +208,10 @@ string message
         assert_eq!(action.goal.fields.len(), 1);
 
         // Result should have 2 fields
-        assert_eq!(action.result.as_ref().unwrap().fields.len(), 2);
+        assert_eq!(action.result.fields.len(), 2);
 
         // Feedback should be empty
-        assert_eq!(action.feedback.as_ref().unwrap().fields.len(), 0);
+        assert_eq!(action.feedback.fields.len(), 0);
     }
 
     #[test]
@@ -269,15 +263,17 @@ int32 result
 
     #[test]
     fn test_parse_all_empty_sections() {
-        // "---\n---\n" — valid, all three sections empty
+        // "---\n---\n" — valid, all three sections empty; ROS 2 actions always
+        // expose Goal/Result/Feedback types, so empty sections yield empty
+        // ParsedMessages rather than None.
         let content = "---\n---\n";
         let path = PathBuf::from("Empty.action");
         let result = parse_action(content, "Empty", "test_pkg", &path);
         assert!(result.is_ok());
         let action = result.unwrap();
         assert!(action.goal.fields.is_empty());
-        assert!(action.result.is_none());
-        assert!(action.feedback.is_none());
+        assert!(action.result.fields.is_empty());
+        assert!(action.feedback.fields.is_empty());
     }
 
     #[test]
@@ -298,8 +294,8 @@ int32 result
         assert!(result.is_ok());
         let action = result.unwrap();
         assert!(action.goal.fields.is_empty());
-        assert_eq!(action.result.as_ref().unwrap().fields.len(), 0);
-        assert_eq!(action.feedback.as_ref().unwrap().fields.len(), 0);
+        assert_eq!(action.result.fields.len(), 0);
+        assert_eq!(action.feedback.fields.len(), 0);
     }
 
     #[test]
