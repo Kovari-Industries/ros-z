@@ -90,6 +90,7 @@ impl MessageGenerator {
                 "action_tutorials_interfaces",
                 "test_msgs",
                 "tf2_msgs",
+                "diagnostic_msgs",
             ]
             .iter()
             .map(|s| s.to_string())

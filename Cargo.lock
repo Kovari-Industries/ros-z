@@ -5651,3 +5651,27 @@ dependencies = [
  "quote",
  "syn 2.0.110",
 ]
+
+[[patch.unused]]
+name = "action_msgs"
+version = "2.0.3"
+
+[[patch.unused]]
+name = "builtin_interfaces"
+version = "2.0.3"
+
+[[patch.unused]]
+name = "evo_interfaces"
+version = "0.0.0"
+
+[[patch.unused]]
+name = "service_msgs"
+version = "2.0.3"
+
+[[patch.unused]]
+name = "std_msgs"
+version = "5.3.7"
+
+[[patch.unused]]
+name = "unique_identifier_msgs"
+version = "2.5.0"

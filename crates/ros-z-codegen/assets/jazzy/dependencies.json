@@ -71,6 +71,12 @@
         "builtin_interfaces",
         "geometry_msgs"
       ]
+    },
+    "diagnostic_msgs": {
+      "dependencies": [
+        "builtin_interfaces",
+        "std_msgs"
+      ]
     }
   }
 }

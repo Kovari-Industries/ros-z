@@ -55,6 +55,7 @@ example_interfaces = []
 action_tutorials_interfaces = []
 test_msgs = []
 tf2_msgs = ["geometry_msgs"]
+diagnostic_msgs = ["std_msgs"]
 
 # Convenience aliases
 common_interfaces = ["std_msgs", "geometry_msgs", "sensor_msgs"]
@@ -69,6 +70,7 @@ all_msgs = [
   "rcl_interfaces",
   "test_msgs",
   "tf2_msgs",
+  "diagnostic_msgs",
 ]
 
 bundled_msgs = ["std_msgs", "geometry_msgs", "sensor_msgs", "nav_msgs"]
