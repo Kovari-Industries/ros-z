@@ -15,7 +15,6 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   deploy-preview:
@@ -28,16 +27,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Determinate Nix
+      - name: Install Nix
         if: github.event.action != 'closed'
-        uses: DeterminateSystems/determinate-nix-action@v3
+        uses: cachix/install-nix-action@v31
 
       - name: Build MkDocs documentation
         if: github.event.action != 'closed'
         run: |
           nix develop '.#pureRust-ci' -c mkdocs build --strict
-        env:
-          NIX_ACCEPT_FLAKE_CONFIG: 1
 
       - name: Deploy MkDocs preview
         uses: rossjrw/pr-preview-action@v1
