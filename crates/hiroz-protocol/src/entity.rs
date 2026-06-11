@@ -84,6 +84,36 @@ impl NodeEntity {
     }
 }
 
+/// Action sub-topic suffixes registered by an action server.
+/// These are appended to the action name (e.g. `/fibonacci/_action/send_goal`).
+pub const ACTION_SERVER_SERVICE_SUFFIXES: &[&str] = &[
+    "/_action/send_goal",
+    "/_action/get_result",
+    "/_action/cancel_goal",
+];
+
+/// Action sub-topic suffixes for publisher endpoints registered by an action server.
+pub const ACTION_SERVER_TOPIC_SUFFIXES: &[&str] = &["/_action/feedback", "/_action/status"];
+
+/// All action sub-topic suffixes (services + topics) belonging to an action server.
+pub const ACTION_SERVER_ALL_SUFFIXES: &[&str] = &[
+    "/_action/send_goal",
+    "/_action/get_result",
+    "/_action/cancel_goal",
+    "/_action/feedback",
+    "/_action/status",
+];
+
+/// Returns the action name by stripping a known action sub-topic suffix, or `None`.
+pub fn action_name_from_topic(topic: &str) -> Option<&str> {
+    for suffix in ACTION_SERVER_ALL_SUFFIXES {
+        if let Some(base) = topic.strip_suffix(suffix) {
+            return Some(base);
+        }
+    }
+    None
+}
+
 /// ROS 2 endpoint kind (publisher, subscription, service, client).
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub enum EndpointKind {

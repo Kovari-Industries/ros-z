@@ -257,8 +257,7 @@ impl GraphEventManager {
             crate::entity::Entity::Endpoint(endpoint) => match endpoint.kind {
                 EndpointKind::Publisher => ZenohEventType::SubscriptionMatched,
                 EndpointKind::Subscription => ZenohEventType::PublicationMatched,
-                EndpointKind::Service => return, // TODO: Add service matched events
-                EndpointKind::Client => return,  // TODO: Add service matched events
+                EndpointKind::Service | EndpointKind::Client => return, // TODO: Add service matched events
             },
             crate::entity::Entity::Node(_) => return, // Node changes don't trigger matched events
         };

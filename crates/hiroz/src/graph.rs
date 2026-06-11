@@ -10,7 +10,8 @@ use tokio::sync::Notify;
 use tracing::debug;
 
 use crate::entity::{
-    ADMIN_SPACE, EndpointEntity, EndpointKind, Entity, LivelinessKE, NodeKey, Topic,
+    ACTION_SERVER_SERVICE_SUFFIXES, ACTION_SERVER_TOPIC_SUFFIXES, ADMIN_SPACE, EndpointEntity,
+    EndpointKind, Entity, LivelinessKE, NodeKey, Topic, action_name_from_topic,
 };
 use crate::event::GraphEventManager;
 use tracing;
@@ -130,12 +131,29 @@ fn entity_matches_local_zid(entity: &Entity, key_expr: &KeyExpr, local_zid: Zeno
     owner_zid.is_some_and(|zid| zid == local_zid)
 }
 
+/// Returns true if `(kind, topic)` is an action server sub-endpoint that should be
+/// indexed under the action name in `by_action`.
+fn is_action_server_sub_endpoint(kind: EndpointKind, topic: &str) -> bool {
+    match kind {
+        EndpointKind::Service => ACTION_SERVER_SERVICE_SUFFIXES
+            .iter()
+            .any(|s| topic.ends_with(s)),
+        EndpointKind::Publisher => ACTION_SERVER_TOPIC_SUFFIXES
+            .iter()
+            .any(|s| topic.ends_with(s)),
+        _ => false,
+    }
+}
+
 pub struct GraphData {
     cached: HashSet<LivelinessKE>,
     parsed: HashMap<LivelinessKE, Arc<Entity>>,
     by_topic: HashMap<Topic, Slab<Weak<Entity>>>,
     by_service: HashMap<Topic, Slab<Weak<Entity>>>,
     by_node: HashMap<NodeKey, Slab<Weak<Entity>>>,
+    /// Keyed by action name (e.g. `/fibonacci`). Stores all action sub-endpoints
+    /// (services + publishers) belonging to action servers for that action.
+    by_action: HashMap<Topic, Slab<Weak<Entity>>>,
     parser: EntityParser,
 }
 
@@ -147,6 +165,7 @@ impl GraphData {
             by_topic: HashMap::new(),
             by_service: HashMap::new(),
             by_node: HashMap::new(),
+            by_action: HashMap::new(),
             parser,
         }
     }
@@ -308,6 +327,20 @@ impl GraphData {
 
                         service_slab.insert(weak.clone());
                     }
+
+                    // Index action server sub-endpoints by action name.
+                    if is_action_server_sub_endpoint(x.kind, &x.topic)
+                        && let Some(action_name) = action_name_from_topic(&x.topic)
+                    {
+                        let action_slab = self
+                            .by_action
+                            .entry(action_name.to_string())
+                            .or_insert_with(|| Slab::with_capacity(DEFAULT_SLAB_CAPACITY));
+                        if action_slab.len() >= action_slab.capacity() {
+                            action_slab.retain(|_, weak_ptr| weak_ptr.upgrade().is_some());
+                        }
+                        action_slab.insert(weak.clone());
+                    }
                     if let Some(node) = x.node.as_ref() {
                         let node_slab = self
                             .by_node
@@ -397,6 +430,26 @@ impl GraphData {
         }
 
         if let Some(entities) = self.by_service.get_mut(service_name.as_ref()) {
+            entities.retain(|_, weak| {
+                if let Some(rc) = weak.upgrade() {
+                    f(rc);
+                    true
+                } else {
+                    false
+                }
+            });
+        }
+    }
+
+    pub fn visit_by_action<F>(&mut self, action_name: impl AsRef<str>, mut f: F)
+    where
+        F: FnMut(Arc<Entity>),
+    {
+        if !self.cached.is_empty() {
+            self.parse();
+        }
+
+        if let Some(entities) = self.by_action.get_mut(action_name.as_ref()) {
             entities.retain(|_, weak| {
                 if let Some(rc) = weak.upgrade() {
                     f(rc);
@@ -732,6 +785,22 @@ impl Graph {
                     service_slab.insert(weak.clone());
                 }
 
+                // Index by action name for action server sub-endpoints.
+                // Mirrors parse() so that local (same-process) action servers are immediately
+                // visible to has_action_server without waiting for the liveliness echo.
+                if is_action_server_sub_endpoint(endpoint.kind, &endpoint.topic)
+                    && let Some(action_name) = action_name_from_topic(&endpoint.topic)
+                {
+                    let action_slab = data
+                        .by_action
+                        .entry(action_name.to_string())
+                        .or_insert_with(|| Slab::with_capacity(DEFAULT_SLAB_CAPACITY));
+                    if action_slab.len() >= action_slab.capacity() {
+                        action_slab.retain(|_, weak_ptr| weak_ptr.upgrade().is_some());
+                    }
+                    action_slab.insert(weak.clone());
+                }
+
                 // Index by node
                 if let Some(node) = endpoint.node.as_ref() {
                     let node_slab = data
@@ -863,6 +932,33 @@ impl Graph {
             }
         }
         total
+    }
+
+    /// Returns `true` when at least one fully-ready action server for `action_name`
+    /// is visible in the graph — i.e. all five required sub-endpoints (three services
+    /// and two publishers) have been announced via liveliness.
+    pub fn has_action_server(&self, action_name: impl AsRef<str>) -> bool {
+        let action_name = action_name.as_ref();
+        let mut data = self.data.lock();
+        let mut found: u8 = 0;
+        // Each of the 5 sub-endpoints gets a distinct bit; we need all 5 set.
+        const BITS: &[(&str, u8)] = &[
+            ("/_action/send_goal", 0b00001),
+            ("/_action/get_result", 0b00010),
+            ("/_action/cancel_goal", 0b00100),
+            ("/_action/feedback", 0b01000),
+            ("/_action/status", 0b10000),
+        ];
+        data.visit_by_action(action_name, |ent| {
+            if let Some(ep) = crate::entity::entity_get_endpoint(&ent) {
+                for (suffix, bit) in BITS {
+                    if ep.topic.ends_with(suffix) {
+                        found |= bit;
+                    }
+                }
+            }
+        });
+        found == 0b11111
     }
 
     pub fn get_entities_by_topic(
@@ -1236,24 +1332,8 @@ impl Graph {
         timeout: Duration,
     ) -> bool {
         let action_name = action_name.into();
-        let goal_service = format!("{action_name}/_action/send_goal");
-        let result_service = format!("{action_name}/_action/get_result");
-        let cancel_service = format!("{action_name}/_action/cancel_goal");
-        let feedback_topic = format!("{action_name}/_action/feedback");
-        let status_topic = format!("{action_name}/_action/status");
-
-        self.wait_until(timeout, move |graph| {
-            graph.count_by_service(EndpointKind::Service, &goal_service) >= 1
-                && graph.count_by_service(EndpointKind::Service, &result_service) >= 1
-                && graph.count_by_service(EndpointKind::Service, &cancel_service) >= 1
-                && !graph
-                    .get_entities_by_topic(EndpointKind::Publisher, &feedback_topic)
-                    .is_empty()
-                && !graph
-                    .get_entities_by_topic(EndpointKind::Publisher, &status_topic)
-                    .is_empty()
-        })
-        .await
+        self.wait_until(timeout, move |graph| graph.has_action_server(&action_name))
+            .await
     }
 
     /// Create a serializable snapshot of the current graph state

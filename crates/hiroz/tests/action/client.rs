@@ -179,9 +179,50 @@ mod tests {
         Ok(())
     }
 
-    // TODO: Additional tests would cover:
-    // - Server availability checks
-    // - Introspection configuration
-    // - Fault injection tests (memory allocation failures)
-    // These would require more complex setup and are deferred for now
+    #[serial]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_action_client_wait_for_server_no_server() -> Result<()> {
+        // No server is ever started — wait_for_server must return false within the timeout.
+        let ctx = ZContextBuilder::default().build()?;
+        let node = ctx.create_node("wait_no_server_client").build()?;
+        let client = node
+            .create_action_client::<TestAction>("/nonexistent_action")
+            .build()?;
+
+        let ready = client
+            .wait_for_server(std::time::Duration::from_millis(300))
+            .await;
+        assert!(
+            !ready,
+            "wait_for_server must return false when no server is present"
+        );
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_has_action_server_direct() -> Result<()> {
+        // Verify has_action_server via the graph API directly, without going through
+        // wait_for_server. Local action servers are indexed synchronously in add_local_entity,
+        // so no discovery delay is needed.
+        let ctx = ZContextBuilder::default().build()?;
+        let node = ctx.create_node("has_server_direct_node").build()?;
+
+        assert!(
+            !node.graph().has_action_server("/direct_test_action"),
+            "has_action_server must be false before any server is created"
+        );
+
+        let _server = node
+            .create_action_server::<TestAction>("/direct_test_action")
+            .build()?;
+
+        assert!(
+            node.graph().has_action_server("/direct_test_action"),
+            "has_action_server must be true immediately after build() — \
+             all 5 sub-endpoints (send_goal, get_result, cancel_goal, feedback, status) \
+             are indexed synchronously via add_local_entity"
+        );
+        Ok(())
+    }
 }
