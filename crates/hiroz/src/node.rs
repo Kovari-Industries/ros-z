@@ -955,6 +955,20 @@ impl ZNode {
     }
 
     // ========================================================================
+    // Advanced API
+    // ========================================================================
+
+    /// Returns the key expression format used by this node.
+    pub fn keyexpr_format(&self) -> hiroz_protocol::KeyExprFormat {
+        self.keyexpr_format
+    }
+
+    /// Allocates and returns the next unique entity ID from this node's counter.
+    pub fn next_entity_id(&self) -> usize {
+        self.counter.increment()
+    }
+
+    // ========================================================================
     // Parameter API
     // ========================================================================
 
