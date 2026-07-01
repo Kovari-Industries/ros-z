@@ -55,10 +55,23 @@ nav_msgs = ["std_msgs", "geometry_msgs"]
 example_interfaces = []
 action_tutorials_interfaces = []
 test_msgs = []
+tf2_msgs = ["geometry_msgs"]
+visualization_msgs = ["std_msgs", "geometry_msgs", "sensor_msgs"]
+rosgraph_msgs = []
+trajectory_msgs = ["std_msgs", "geometry_msgs"]
+diagnostic_msgs = ["std_msgs"]
+shape_msgs = ["geometry_msgs"]
+stereo_msgs = ["std_msgs", "sensor_msgs"]
+statistics_msgs = []
+composition_interfaces = ["rcl_interfaces"]
+std_srvs = []
+rosbag2_interfaces = []
 
 # Convenience aliases
 common_interfaces = ["std_msgs", "geometry_msgs", "sensor_msgs"]
 robotics = ["core_msgs"]
+# test_msgs is intentionally excluded: BasicTypes has a wstring field that codegen
+# skips, but Nested* types still reference it, causing a compile error with all_msgs.
 all_msgs = [
   "std_msgs",
   "geometry_msgs",
@@ -67,7 +80,17 @@ all_msgs = [
   "example_interfaces",
   "action_tutorials_interfaces",
   "rcl_interfaces",
-  "test_msgs",
+  "tf2_msgs",
+  "visualization_msgs",
+  "rosgraph_msgs",
+  "trajectory_msgs",
+  "diagnostic_msgs",
+  "shape_msgs",
+  "stereo_msgs",
+  "statistics_msgs",
+  "composition_interfaces",
+  "std_srvs",
+  "rosbag2_interfaces",
 ]
 
 bundled_msgs = ["std_msgs", "geometry_msgs", "sensor_msgs", "nav_msgs"]
